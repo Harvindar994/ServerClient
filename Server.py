@@ -2,17 +2,26 @@ import socket
 
 
 class Server:
-    def __init__(self, name, auth=None):
+    def __init__(self, name, auth=None, maxConn=1, maxConnReachTrigger=None):
         if auth is not None:
             self.username = auth['username']
             self.password = auth['password']
         self.name = name
+        if maxConn > 1:
+            self.maxConn = maxConn
+        else:
+            self.maxConn = 1
+
+        self.trigger = maxConnReachTrigger
 
         # for storing all the connection data.
         self.connections = []
 
     def createConnData(self, name, conn, addr):
-        return {'name': name, 'conn': conn, 'addr':addr}
+        return {'name': name, 'conn': conn, 'addr': addr}
+
+    def setTriggerOnMaxConnReach(self, trigger):
+        self.trigger = maxConnReachTrigger
 
 
 class Server:
