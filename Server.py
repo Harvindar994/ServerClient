@@ -17,11 +17,27 @@ class Server:
         # for storing all the connection data.
         self.connections = []
 
+        # it will store response of main connection.
+        # in this server we can set only one connection as main connection that when we will fetch response we can
+        # in so easy way. just by calling function getMainCoonResponse().
+        self.mainConnResponse = None
+
+
     def createConnData(self, name, conn, addr):
-        return {'name': name, 'conn': conn, 'addr': addr}
+        return {'name': name, 'conn': conn, 'addr': addr, 'response': []}
 
     def setTriggerOnMaxConnReach(self, trigger):
         self.trigger = maxConnReachTrigger
+
+    def setAsMainConnection(self, name):
+        for conn in self.connections:
+            if name in conn:
+                self.mainConnResponse = conn['response']
+                return True
+        return False
+
+    def getMainConnResponse(self):
+        return self.mainConnResponse.pop()
 
 
 class Server:
