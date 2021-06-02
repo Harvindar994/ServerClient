@@ -1,11 +1,10 @@
 import socket
+import threading
 
 
 class Server:
-    def __init__(self, name, auth=None, maxConn=1, maxConnReachTrigger=None):
-        if auth is not None:
-            self.username = auth['username']
-            self.password = auth['password']
+    def __init__(self, name, auth=None, maxConn=120, maxConnReachTrigger=None):
+        self.auth = auth
         self.name = name
         if maxConn > 1:
             self.maxConn = maxConn
@@ -18,13 +17,29 @@ class Server:
         self.connections = []
 
         # it will store response of main connection.
-        # in this server we can set only one connection as main connection that when we will fetch response we can
-        # in so easy way. just by calling function getMainCoonResponse().
+        # in this server, we can set only one connection as the main connection when we will fetch a response
+        # we can fetch it in so easy way. just by calling function getMainCoonResponse().
         self.mainConnResponse = None
 
+        # the final connection from which the user fetched the response.
+        self.lastActivityConn = None
 
-    def createConnData(self, name, conn, addr):
-        return {'name': name, 'conn': conn, 'addr': addr, 'response': []}
+        # for internal use of server.
+        self.PORT = 5555
+        self.HEADER = 64
+        self.FORMAT = "utf-8"
+        self.IpAddress = None
+        self.runningStatus = False
+
+        # Server is listening for new connection or not is on the server it will decide on the basic on maxConn.
+        self.serverListeningStatus = False
+
+        # server socket, it will store the socket object that we create with the help os socket.
+        self.server = None
+
+    @staticmethod
+    def createConnData(conn, addr, name=None, status=True):
+        return {'name': name, 'conn': conn, 'addr': addr, 'response': [], status:status}
 
     def setTriggerOnMaxConnReach(self, trigger):
         self.trigger = maxConnReachTrigger
@@ -38,6 +53,75 @@ class Server:
 
     def getMainConnResponse(self):
         return self.mainConnResponse.pop()
+
+    def getResponse(self, name):
+        for conn in self.connections:
+            if name in conn:
+                self.lastActivityConn = conn['response']
+                return conn['response'].pop()
+        return None
+
+    def startServer(self):
+        try:
+            self.IpAddress = socket.gethostbyname(socket.gethostname())
+            address = (self.IP_ADDRESS, self.PORT)
+            self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.server.bind(address)
+            connectionListenerThread = threading.Thread(target=self.connection_listener)
+            connectionListenerThread.start()
+        except:
+            self.runningStatus = False
+            return False
+        self.runningStatus = True
+        self.serverListeningStatus = True
+        return True
+
+    def connectionListener(self):
+        self.server.listen()
+        while self.serverListeningStatus and self.runningStatus:
+            try:
+                conn, addr = self.server.accept()
+                connectionThread = threading.Thread(target=self.connectionHandler, args=(self.createConnData(conn, addr),))
+                connectionThread.start()
+            except:
+                continue
+
+    def connectionHandler(self, connData):
+        connection = connData['conn']
+        if self.auth is None:
+            self.sendMessage(connection, {'auth': 'yes'})
+        else:
+            self.sendMessage(connection, {'auth': 'not'})
+        while True:
+
+
+    def receiveMessage(self, conn):
+        try:
+            msg_length = conn.recv(self.HEADER).decode(self.FORMAT)
+        except ConnectionResetError:
+            return False
+        if msg_length:
+            try:
+                msg_length = int(msg_length)
+            except:
+                return False
+            msg = conn.recv(msg_length)
+            try:
+                message = msg.decode(self.FORMAT)
+            except UnicodeDecodeError:
+                message = pickle.loads(msg)
+            return message
+
+    def sendMessage(self, conn, msg):
+        if type(msg) == str:
+            message = msg.encode(self.FORMAT)
+        else:
+            message = pickle.dumps(msg)
+        msg_length = len(message)
+        send_length = str(msg_length).encode(self.FORMAT)
+        send_length += b" " * (self.HEADER - len(send_length))
+        conn.send(send_length)
+        conn.send(message)
 
 
 class Server:
