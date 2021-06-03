@@ -88,10 +88,10 @@ class Server:
     def startServer(self):
         try:
             self.IpAddress = socket.gethostbyname(socket.gethostname())
-            address = (self.IP_ADDRESS, self.PORT)
+            address = (self.IpAddress, self.PORT)
             self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server.bind(address)
-            connectionListenerThread = threading.Thread(target=self.connection_listener)
+            connectionListenerThread = threading.Thread(target=self.connectionListener)
             connectionListenerThread.start()
         except:
             self.runningStatus = False
@@ -230,4 +230,4 @@ def allDeviceConnected():
 
 
 server = Server('Harvindar Singh', {'user': 'harvindar994', 'password': 12345678}, 4, allDeviceConnected)
-server.startServer()
+print(server.startServer())
