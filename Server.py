@@ -76,8 +76,9 @@ class Server:
         return None
 
     def authentication(self, auth):
-        if self.auth['user'] == auth['user'] and self.auth['password'] == auth['password']:
-            return True
+        if auth is not None:
+            if self.auth['user'] == auth['user'] and self.auth['password'] == auth['password']:
+                return True
         return False
 
     @staticmethod
@@ -137,16 +138,19 @@ class Server:
 
     def connectionHandler(self, connData):
         connection = connData['conn']
-        if self.auth is None:
+        if self.auth is not None:
             self.sendMessage(connection, {'auth': 'yes'})
             message = self.receiveMessage(connection)
             if 'auth' not in message:
+                self.sendMessage(connection, DISCONNECT)
                 return
             else:
                 if 'name' not in message:
+                    self.sendMessage(connection, DISCONNECT)
                     return
                 else:
                     if not self.authentication(message['auth']):
+                        self.sendMessage(connection, DISCONNECT)
                         return
                     else:
                         connData['name'] = message['name']
@@ -154,11 +158,13 @@ class Server:
             self.sendMessage(connection, {'auth': 'not'})
             message = self.receiveMessage(connection)
             if 'name' not in message:
+                self.sendMessage(connection, DISCONNECT)
                 return
             connData['name'] = message['name']
         if not self.addNewConnection(connData):
             self.checkForListening()
             return
+        self.sendMessage(connection, CONNECTED)
         while self.runningStatus and connData['status']:
             try:
                 message = self.receiveMessage(connection)

@@ -10,9 +10,15 @@ CallOnResponse = "CallOnResponse"
 
 
 class Client:
-    def __init__(self):
-        # for internal use of client.
+    def __init__(self, retryOnDisconnect=2):
+        # info required to connect to server.
         self.PORT = 5555
+        self.IpAddress = None
+        self.auth = None
+
+        # for internal use of client.
+        self.retryOnDisconnect = retryOnDisconnect
+        self.name = socket.gethostname()
         self.HEADER = 64
         self.FORMAT = "utf-8"
 
@@ -30,6 +36,10 @@ class Client:
         if len(self.response) > 0:
             return self.response.pop(0)
 
+    def connectAgain(self, IpAddress, Port=5555):
+        address = (IpAddress, Port)
+        self.Client.connect(address)
+
     def responseReceiver(self):
         """
         this function will perform in different thread
@@ -38,18 +48,54 @@ class Client:
         self.receiverRunningStatus = True
         while self.connectionStatus:
             message = self.receiveMessage()
-            print(message)
-            if self.CallOnResponse is not None:
-                self.CallOnResponse(message)
-            else:
-                self.response.append(message)
+            if type(message) == str:
+                if message == DISCONNECT:
+                    self.receiverRunningStatus = False
+                    self.connectionStatus = False
+                    if self.retryOnDisconnect > 0:
+                        self.retryOnDisconnect -= 1
+                        self.connectAgain(self.IpAddress, self.PORT)
+                    return
+                elif message == CONNECTED:
+                    self.receiverRunningStatus = True
+                    self.connectionStatus = True
+                    print("Connected with server")
+            elif type(message) == dict:
+                if 'auth' in message:
+                    if message['auth'] == 'yes':
+                        self.sendMessage({'auth': self.auth, 'name': self.name})
+                    elif message['auth'] == 'no':
+                        self.sendMessage({'name': self.name})
+            if self.connectionStatus:
+                if self.CallOnResponse is not None:
+                    self.CallOnResponse(message)
+                else:
+                    self.response.append(message)
 
-
-    def connect(self):
-        pass
+    def connect(self, ipAddress, auth=None, Port=5555):
+        self.auth = auth
+        self.PORT = Port
+        self.IpAddress = ipAddress
+        address = (ipAddress, self.PORT)
+        self.Client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            self.Client.connect(address)
+            receiverThread = threading.Thread(target=self.responseReceiver)
+            receiverThread.start()
+            self.receiverRunningStatus = True
+            return True
+        except:
+            self.connectionStatus = False
+            print("Fail to connect with server")
+            return False
 
     def closeConnection(self):
-        pass
+        self.sendMessage(DISCONNECT)
+        self.connectionStatus = False
+        self.response = []
+        self.receiverRunningStatus = False
+        self.Client.close_connection()
+        self.Client = None
 
     def setCallOnResponse(self, trigger):
         self.CallOnResponse = trigger
@@ -81,68 +127,3 @@ class Client:
         send_length += b" " * (self.HEADER - len(send_length))
         self.Client.send(send_length)
         self.Client.send(message)
-
-
-
-class Client:
-    def __init__(self):
-        self.PORT = 5555
-        self.ADDR = None
-        self.HEADER = 64
-        self.FORMATE = "utf-8"
-        self.connection_status = False
-        self.client = None
-        self.received_response = []
-        self.current_player_name = None
-        self.receiver_thread_status = True
-
-    def close_connection(self):
-        try:
-            self.client.close()
-            self.client.shutdown(1)
-            self.receiver_thread_status = False
-            self.current_player_name = None
-            self.received_response = []
-            self.connection_status = False
-            self.client = None
-        except:
-            return
-
-    def getResponse(self):
-        try:
-            return self.received_response.pop()
-        except IndexError:
-            return None
-
-    def connect(self, name, user_id, password):
-        self.ADDR = (decode(user_id.upper()), self.PORT)
-        self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            self.client.connect(self.ADDR)
-            print("Connected with server")
-            self.connection_status = True
-            receiver_thread = threading.Thread(target=self.receiver_thread)
-            receiver_thread.start()
-        except:
-            self.connection_status = False
-            print("Fail to connect with server")
-            return
-        self.send_data({'auth': password, 'name': name})
-
-    def receiver_thread(self):
-        while self.receiver_thread_status:
-            try:
-                data = receive_msg(self.client)
-            except:
-                print("Stoped receving")
-                return
-            if type(data) == dict:
-                self.received_response.append(data)
-
-    def send_data(self, data):
-        try:
-            send_message(self.client, data)
-        except:
-            print("Fail to send message.")
-            return
-        print("Message sended.")
