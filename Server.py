@@ -53,7 +53,7 @@ class Server:
     def setTriggerOnMaxConnReach(self, trigger):
         self.trigger = maxConnReachTrigger
 
-    def setAsMainConnection(self, name):
+    def setAsMainConnection(self, name, ipAddress):
         for conn in self.connections:
             if name in conn:
                 self.mainConnResponse = conn['response']
@@ -61,13 +61,18 @@ class Server:
         return False
 
     def getMainConnResponse(self):
-        return self.mainConnResponse.pop()
+        return self.mainConnResponse.pop(0)
 
-    def getResponse(self, name):
+    def getResponse(self, name, ipAddress):
+        if self.lastActivityConn is not None:
+            if self.lastActivityConn['name'] == name and self.getConnectionIp(self.lastActivityConn) == ipAddress:
+                print("From Last Active Connection: ")
+                return self.lastActivityConn['response'].pop(0)
         for conn in self.connections:
-            if name in conn:
-                self.lastActivityConn = conn['response']
-                return conn['response'].pop()
+            if conn['name'] == name and self.getConnectionIp(conn) == ipAddress:
+                self.lastActivityConn = conn
+                print("Through itration")
+                return conn['response'].pop(0)
         return None
 
     def authentication(self, auth):
@@ -231,3 +236,39 @@ def allDeviceConnected():
 
 server = Server('Harvindar Singh', {'user': 'harvindar994', 'password': 12345678}, 4, allDeviceConnected)
 print(server.startServer())
+
+while True:
+    print("------------ Server Menu ------------")
+    print("Server Running On: ", server.IpAddress, "Port: ", server.PORT)
+    print("-------------------------------------")
+    print("1. View All The Connection")
+    print("2. Total Connected Device")
+    print("3. Check All Status")
+    print("4. View All Connected Device and IpAddress")
+    print("5. Check Response Received From Device")
+    print("6. Set A Connection As  Main Connection")
+    print("Enter the choice: ")
+    choice = input()
+    if choice == '1':
+        print("------------------ List of All Connections ---------------------")
+        for conn in server.connections:
+            print(conn)
+        print("------------ List of All Connections Ended Here -----------------")
+    elif choice == '2':
+        print("Total Connection: ",server.getTotalConnection())
+    elif choice == '3':
+        print("Server Running Status: ", server.runningStatus)
+        print("Server Listening Status: ", server.serverListeningStatus)
+    elif choice == '4':
+        print("------------------------ List of All Connected Devices --------------------------")
+        for conn in server.connections:
+            print("Device Name: ",conn['name'], "Device IpAddress: ",server.getConnectionIp(conn))
+        print("------------------ List of All Connected Devices End's Here ---------------------")
+    elif choice == '5':
+        ip = input("Enter the IpAddress : ")
+        name = input("Enter the name: ")
+        print(server.getResponse(name, ip))
+    elif choice == '6':
+        ip = input("Enter the IpAddress : ")
+        name = input("Enter the name: ")
+        server.setAsMainConnection(name, ip)

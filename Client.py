@@ -11,6 +11,68 @@ CallOnResponse = "CallOnResponse"
 
 class Client:
     def __init__(self):
+        # for internal use of client.
+        self.PORT = 5555
+        self.HEADER = 64
+        self.FORMAT = "utf-8"
+
+        self.Client = None
+        self.connectionStatus = False
+
+        # to store all received response.
+        self.response = []  # but this this store response when CallOnResponse trigger is not set.
+
+        # CallOnResponse trigger
+        self.CallOnResponse = None  # if trigger is set client well call the trigger at each response.
+
+    def getResponse(self):
+        if len(self.response) > 0:
+            return self.response.pop(0)
+
+    def responseReceiver(self):
+        pass
+
+    def connect(self):
+        pass
+
+    def closeConnection(self):
+        pass
+
+    def setCallOnResponse(self, trigger):
+        self.CallOnResponse = trigger
+
+    def receiveMessage(self):
+        try:
+            msg_length = self.Client.recv(self.HEADER).decode(self.FORMAT)
+        except ConnectionResetError:
+            return False
+        if msg_length:
+            try:
+                msg_length = int(msg_length)
+            except:
+                return False
+            msg = self.Client.recv(msg_length)
+            try:
+                message = msg.decode(self.FORMAT)
+            except UnicodeDecodeError:
+                message = pickle.loads(msg)
+            return message
+
+    def sendMessage(self, msg):
+        if type(msg) == str:
+            message = msg.encode(self.FORMAT)
+        else:
+            message = pickle.dumps(msg)
+        msg_length = len(message)
+        send_length = str(msg_length).encode(self.FORMAT)
+        send_length += b" " * (self.HEADER - len(send_length))
+        self.Client.send(send_length)
+        self.Client.send(message)
+
+
+
+class Client:
+    def __init__(self):
         self.PORT = 5555
         self.ADDR = None
         self.HEADER = 64
