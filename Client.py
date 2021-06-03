@@ -18,6 +18,7 @@ class Client:
 
         self.Client = None
         self.connectionStatus = False
+        self.receiverRunningStatus = False
 
         # to store all received response.
         self.response = []  # but this this store response when CallOnResponse trigger is not set.
@@ -30,7 +31,19 @@ class Client:
             return self.response.pop(0)
 
     def responseReceiver(self):
-        pass
+        """
+        this function will perform in different thread
+        :return: Nothing.
+        """
+        self.receiverRunningStatus = True
+        while self.connectionStatus:
+            message = self.receiveMessage()
+            print(message)
+            if self.CallOnResponse is not None:
+                self.CallOnResponse(message)
+            else:
+                self.response.append(message)
+
 
     def connect(self):
         pass
