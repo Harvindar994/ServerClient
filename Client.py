@@ -1,4 +1,12 @@
 import socket
+import threading
+
+# default messages.
+DISCONNECT = '!DISCONNECT'
+CONNECTED = "!CONNECTED"
+
+# triggers
+CallOnResponse = "CallOnResponse"
 
 
 class Client:

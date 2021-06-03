@@ -1,6 +1,13 @@
 import socket
 import threading
 
+# default messages.
+DISCONNECT = '!DISCONNECT'
+CONNECTED = "!CONNECTED"
+
+# triggers
+CallOnResponse = "CallOnResponse"
+
 
 class Server:
     def __init__(self, name, auth=None, maxConn=120, maxConnReachTrigger=None):
@@ -39,7 +46,9 @@ class Server:
 
     @staticmethod
     def createConnData(conn, addr, name=None, status=True):
-        return {'name': name, 'conn': conn, 'addr': addr, 'response': [], status:status}
+        return {'name': name, 'conn': conn, 'addr': addr, 'response': [], 'status': status}
+        # if in case this connection having 'CallOnResponse' trigger then instead of storing response in the response
+        # list it will call trigger and pass the received response in the trigger.
 
     def setTriggerOnMaxConnReach(self, trigger):
         self.trigger = maxConnReachTrigger
@@ -61,6 +70,21 @@ class Server:
                 return conn['response'].pop()
         return None
 
+    def authentication(self, auth):
+        if self.auth['user'] == auth['user'] and self.auth['password'] == auth['password']:
+            return True
+        return False
+
+    @staticmethod
+    def setCallOnResponse(connectionData, trigger):
+        # For adding new trigger. if in case this function already having a trigger and user called this function again
+        # in this case old trigger well get replaced with new one.
+        connectionData[CallOnResponse] = trigger
+
+    @staticmethod
+    def removeCallOnResponse(connectionData):
+        connectionData.pop(CallOnResponse)
+
     def startServer(self):
         try:
             self.IpAddress = socket.gethostbyname(socket.gethostname())
@@ -76,13 +100,33 @@ class Server:
         self.serverListeningStatus = True
         return True
 
+    def getTotalConnection(self):
+        return len(self.connections)
+
+    def checkForListening(self):
+        if self.runningStatus:
+            if self.getTotalConnection() < self.maxConn:
+                if not self.serverListeningStatus:
+                    connectionListenerThread = threading.Thread(target=self.connection_listener)
+                    connectionListenerThread.start()
+                    return True
+                else:
+                    return True
+            else:
+                self.serverListeningStatus = False
+                return False
+        else:
+            self.serverListeningStatus = False
+
     def connectionListener(self):
         self.server.listen()
         while self.serverListeningStatus and self.runningStatus:
             try:
                 conn, addr = self.server.accept()
-                connectionThread = threading.Thread(target=self.connectionHandler, args=(self.createConnData(conn, addr),))
-                connectionThread.start()
+                connectionThread = threading.Thread(target=self.connectionHandler,
+                                                    args=(self.createConnData(conn, addr),))
+                if self.checkForListening():
+                    connectionThread.start()
             except:
                 continue
 
@@ -90,10 +134,67 @@ class Server:
         connection = connData['conn']
         if self.auth is None:
             self.sendMessage(connection, {'auth': 'yes'})
+            message = self.receiveMessage(connection)
+            if 'auth' not in message:
+                return
+            else:
+                if 'name' not in message:
+                    return
+                else:
+                    if not self.authentication(message['auth']):
+                        return
+                    else:
+                        connData['name'] = message['name']
         else:
             self.sendMessage(connection, {'auth': 'not'})
-        while True:
+            message = self.receiveMessage(connection)
+            if 'name' not in message:
+                return
+            connData['name'] = message['name']
+        if not self.addNewConnection(connData):
+            self.checkForListening()
+            return
+        while self.runningStatus and connData['status']:
+            try:
+                message = self.receiveMessage(connection)
+                print(message)
+                if CallOnResponse in connData:
+                    connData[CallOnResponse](message)
+                    continue
+                else:
+                    connData['response'].append(message)
+                # Here i Will add all the code related to the response.
+            except:
+                self.removeConnection(self.getConnectionIp(connData), connData['name'])
+                self.checkForListening()
+                return
+        self.removeConnection(self.getConnectionIp(connData), connData['name'])
+        self.checkForListening()
 
+    def addNewConnection(self, connectionData):
+        for conn in self.connections:
+            if self.getConnectionIp(conn) == self.getConnectionIp(connectionData) and conn['name'] == connectionData[
+                'name']:
+                return False
+        if self.getTotalConnection() < self.maxConn:
+            self.connections.append(connectionData)
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def getConnectionIp(connectionData):
+        return connectionData['addr'][0]
+
+    def removeConnection(self, connectionIp, name):
+        for conn in self.connections:
+            if self.getConnectionIp(conn) == connectionIp and conn['name'] == name:
+                conn['status'] = False
+                self.connections.remove(conn)
+                self.sendMessage(conn['conn'], DISCONNECT)
+                conn['conn'].close()
+                return True
+        return False
 
     def receiveMessage(self, conn):
         try:
@@ -124,116 +225,9 @@ class Server:
         conn.send(message)
 
 
-class Server:
-    connection = []
+def allDeviceConnected():
+    print("Max Connection Limit Reached")
 
-    def __init__(self, name, password):
-        self.password = password
-        self.name = name
-        self.PORT = 5555
-        self.HEADER = 64
-        self.FORMATE = "utf-8"
 
-        # creating a socket to make a server.
-        self.IP_ADDRESS = socket.gethostbyname(socket.gethostname())
-        self.ADDR = (self.IP_ADDRESS, self.PORT)
-        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server.bind(self.ADDR)
-
-        # variable to control thread.
-        self.Server_Listen = True
-        self.current_player = None
-        self.current_player_name = None
-
-        # creating an variable to store received message.
-        self.received_response = []
-
-        self.server_status = False
-
-    def response(self):
-        try:
-            return self.received_response.pop()
-        except IndexError:
-            return None
-
-    def connection_listener(self):
-        self.server.listen()
-        while self.Server_Listen and self.server_status:
-            try:
-                conn, addr = self.server.accept()
-                print(f"Connection: {conn, addr}")
-                new_connection = threading.Thread(target=self.handle_connection, args=(conn, addr))
-                new_connection.start()
-            except:
-                return
-
-    def stop(self):
-        self.server_status = False
-        self.server.close()
-        # self.server.shutdown(1)
-        self.connection.clear()
-
-    def start(self):
-        self.server_status = True
-        self.IP_ADDRESS = socket.gethostbyname(socket.gethostname())
-        self.ADDR = (self.IP_ADDRESS, self.PORT)
-        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server.bind(self.ADDR)
-        listener_thread = threading.Thread(target=self.connection_listener)
-        listener_thread.start()
-
-    def handle_connection(self, conn, addr):
-        connection_data = self.createConnectionData(conn, addr)
-        self.add_connection(connection_data)
-        while connection_data['status'] and self.server_status:
-            message = receive_msg(conn)
-            print(message)
-            if self.current_player != None:
-                return
-            if 'auth' in message:
-                if self.auth_user(message['auth']):
-                    if self.current_player == None:
-                        self.current_player = connection_data
-                        self.current_player_name = message['name']
-                        self.remove_connection(connection_data)
-                        self.close_all_temp_connection()
-                        send_message(conn, {'response': 'accepted', 'name': self.name})
-                    else:
-                        send_message(conn, {'response': 'already_playing'})
-                        self.remove_connection(connection_data)
-                        return
-            elif conn == self.current_player['conn']:
-                self.received_response.append(message)
-            else:
-                self.remove_connection(connection_data)
-                return
-
-    def close_all_temp_connection(self):
-        for connection in self.connection:
-            connection['status'] = False
-
-    def auth_user(self, password):
-        if self.password == password:
-            return True
-        else:
-            return False
-
-    def createConnectionData(self, conn, addr):
-        conn_data = {'conn': conn, 'ip': addr[0], 'port': addr[1], 'status': True}
-        return conn_data
-
-    def add_connection(self, data):
-        self.connection.append(data)
-
-    def remove_connection(self, data):
-        try:
-            self.connection.remove(data)
-            return True
-        except ValueError:
-            return False
-
-    def send_data(self, message):
-        try:
-            send_message(self.current_player['conn'], message)
-        except:
-            print("Fail to send data")
+server = Server('Harvindar Singh', {'user': 'harvindar994', 'password': 12345678}, 4, allDeviceConnected)
+server.startServer()
