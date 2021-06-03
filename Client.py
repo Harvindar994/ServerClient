@@ -1,5 +1,7 @@
 import socket
 import threading
+import pickle
+import time
 
 # default messages.
 DISCONNECT = '!DISCONNECT'
@@ -47,12 +49,15 @@ class Client:
         """
         self.receiverRunningStatus = True
         while self.connectionStatus:
+            print("sjjkshdfjsdhf")
             message = self.receiveMessage()
+            print(message)
             if type(message) == str:
                 if message == DISCONNECT:
                     self.receiverRunningStatus = False
                     self.connectionStatus = False
                     if self.retryOnDisconnect > 0:
+                        print("Retrying to connect to server")
                         self.retryOnDisconnect -= 1
                         self.connectAgain(self.IpAddress, self.PORT)
                     return
@@ -80,9 +85,9 @@ class Client:
         self.Client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             self.Client.connect(address)
+            self.receiverRunningStatus = True
             receiverThread = threading.Thread(target=self.responseReceiver)
             receiverThread.start()
-            self.receiverRunningStatus = True
             return True
         except:
             self.connectionStatus = False
@@ -127,3 +132,29 @@ class Client:
         send_length += b" " * (self.HEADER - len(send_length))
         self.Client.send(send_length)
         self.Client.send(message)
+
+
+client = Client()
+while True:
+    print("----------------- Client Menu -----------------")
+    print("1. Connect")
+    print("2. Send Message")
+    print("3. Get Response")
+    print("4. View all response")
+    print("5. Status")
+    print("6. Exit")
+    choice = input()
+    if choice == '1':
+        client.connect('192.168.43.188', {'user': 'harvindar994', 'password': 12345678})
+    elif choice == '2':
+        message = input()
+        client.sendMessage(message)
+    elif choice == '3':
+        print(client.getResponse())
+    elif choice == '4':
+        for response in Client.response:
+            print(response)
+    elif choice == '5':
+        print('Connection Status: ', client.connectionStatus, ", receiver Status: ",client.receiverRunningStatus)
+    elif choice == '6':
+        exit(0)

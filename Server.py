@@ -1,5 +1,7 @@
 import socket
 import threading
+import time
+import pickle
 
 # default messages.
 DISCONNECT = '!DISCONNECT'
@@ -131,6 +133,7 @@ class Server:
                 conn, addr = self.server.accept()
                 connectionThread = threading.Thread(target=self.connectionHandler,
                                                     args=(self.createConnData(conn, addr),))
+                print(addr)
                 if self.checkForListening():
                     connectionThread.start()
             except:
@@ -138,9 +141,12 @@ class Server:
 
     def connectionHandler(self, connData):
         connection = connData['conn']
+        time.sleep(5)
         if self.auth is not None:
             self.sendMessage(connection, {'auth': 'yes'})
             message = self.receiveMessage(connection)
+            if not message:
+                return
             if 'auth' not in message:
                 self.sendMessage(connection, DISCONNECT)
                 return
@@ -222,6 +228,7 @@ class Server:
                 message = msg.decode(self.FORMAT)
             except UnicodeDecodeError:
                 message = pickle.loads(msg)
+            print(message)
             return message
 
     def sendMessage(self, conn, msg):
@@ -253,6 +260,7 @@ while True:
     print("4. View All Connected Device and IpAddress")
     print("5. Check Response Received From Device")
     print("6. Set A Connection As  Main Connection")
+    print("7. Exit")
     print("Enter the choice: ")
     choice = input()
     if choice == '1':
@@ -278,3 +286,5 @@ while True:
         ip = input("Enter the IpAddress : ")
         name = input("Enter the name: ")
         server.setAsMainConnection(name, ip)
+    elif choice == '7':
+        exit(0)
