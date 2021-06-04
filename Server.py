@@ -248,14 +248,7 @@ class Server:
         for conn in self.connections:
             if self.getConnectionIp(conn) == self.getConnectionIp(connectionData) and conn['name'] == connectionData[
                 'name']:
-                # try:
-                print(self.sendMessage(conn['conn'], REFRESH))
-                print("--------------------------------------------------")
-                # except:
-                #     self.removeConnection(self.getConnectionIp(conn), conn['name'])
-                #     break
-                # return False
-
+                return False
         if self.getTotalConnection() < self.maxConn:
             self.connections.append(connectionData)
             return True
