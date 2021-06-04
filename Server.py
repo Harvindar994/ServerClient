@@ -188,22 +188,59 @@ class Server:
 
         # Setting connection Refreshment time. if server is not receiving any message it will send a refresh message.
         connection.settimeout(self.connectionRefreshTime)
+        refreshFlag = False
+        counter = 0
         while self.runningStatus and connData['status']:
             try:
                 message = self.receiveMessage(connection)
-                if CallOnResponse in connData:
-                    connData[CallOnResponse](message)
+                # Non-Dict message is only for server use.
+                if type(message) != dict:
+                    # Here checking for some default message like triggers for the server or some special response.
+                    if message == DONE and refreshFlag:
+                        refreshFlag = False
+
+                    """
+                    if server received False message continuously for 3 time then the 
+                    server will close the connection.
+                    """
+                    if counter < 3:
+                        if not message:
+                            counter += 1
+                        else:
+                            counter = 0
+                    else:
+                        connData['status'] = False
+                        continue
+                else:
+                    """
+                        Here managing the all response which is useful for the user.
+                        if the CallOnResponse is available the it will call the trigger and pass the response in the 
+                        trigger. otherwise the response will get append in the response list which is available in 
+                        the connection data.
+                        structure of connection data: 
+                        case 1: {'name': name, 'conn': conn, 'addr': addr, 'response': [], 'status': status} in this 
+                                the server append the received response in the response list which is in this dict.
+                        case 2: {'name': name, 'conn': conn, 'addr': addr, 'response': [], 'status': status,
+                                  'CallOnResponse': trigger}
+                                in this case server will call the trigger and pass the received response in the trigger.
+                                like: connData[CallOnResponse](message)
+                    """
+                    if CallOnResponse in connData:
+                        connData[CallOnResponse](message)
+                        continue
+                    else:
+                        connData['response'].append(message)
+
+            except socket.timeout:
+                if refreshFlag:
+                    connData['status'] = False
                     continue
                 else:
-                    connData['response'].append(message)
-                # Here i Will add all the code related to the response.
-            except socket.timeout:
-                self.sendMessage(connection, REFRESH)
+                    self.sendMessage(connection, REFRESH)
             except:
-                print("Connection Lost")
-                self.removeConnection(self.getConnectionIp(connData), connData['name'])
-                self.checkForListening()
-                return
+                connData['status'] = False
+                continue
+
         self.removeConnection(self.getConnectionIp(connData), connData['name'])
         self.checkForListening()
 
