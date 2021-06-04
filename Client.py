@@ -47,10 +47,15 @@ class Client:
         this function will perform in different thread
         :return: Nothing.
         """
-        self.receiverRunningStatus = True
-        while self.connectionStatus:
-            print("sjjkshdfjsdhf")
-            message = self.receiveMessage()
+        while self.receiverRunningStatus:
+            try:
+                message = self.receiveMessage()
+            except ConnectionAbortedError:
+                if self.retryOnDisconnect > 0:
+                    print("Retrying to connect to server")
+                    self.retryOnDisconnect -= 1
+                    self.connectAgain(self.IpAddress, self.PORT)
+
             print(message)
             if type(message) == str:
                 if message == DISCONNECT:

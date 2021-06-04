@@ -6,15 +6,17 @@ import pickle
 # default messages.
 DISCONNECT = '!DISCONNECT'
 CONNECTED = "!CONNECTED"
+REFRESH = "!REFRESH"
+DONE = "!DONE"
 
 # triggers
 CallOnResponse = "CallOnResponse"
 
 
 class Server:
-    def __init__(self, name, auth=None, maxConn=120, maxConnReachTrigger=None):
+    def __init__(self, Name, auth=None, maxConn=120, maxConnReachTrigger=None, connectionRefreshTime=None):
         self.auth = auth
-        self.name = name
+        self.name = Name
         if maxConn > 1:
             self.maxConn = maxConn
         else:
@@ -39,6 +41,7 @@ class Server:
         self.FORMAT = "utf-8"
         self.IpAddress = None
         self.runningStatus = False
+        self.connectionRefreshTime = connectionRefreshTime
 
         # Server is listening for new connection or not is on the server it will decide on the basic on maxConn.
         self.serverListeningStatus = False
@@ -141,7 +144,8 @@ class Server:
 
     def connectionHandler(self, connData):
         connection = connData['conn']
-        time.sleep(5)
+        time.sleep(2)
+        # authentication confirmation if it's required.
         if self.auth is not None:
             self.sendMessage(connection, {'auth': 'yes'})
             message = self.receiveMessage(connection)
@@ -149,14 +153,17 @@ class Server:
                 return
             if 'auth' not in message:
                 self.sendMessage(connection, DISCONNECT)
+                connection.close()
                 return
             else:
                 if 'name' not in message:
                     self.sendMessage(connection, DISCONNECT)
+                    connection.close()
                     return
                 else:
                     if not self.authentication(message['auth']):
                         self.sendMessage(connection, DISCONNECT)
+                        connection.close()
                         return
                     else:
                         connData['name'] = message['name']
@@ -165,23 +172,35 @@ class Server:
             message = self.receiveMessage(connection)
             if 'name' not in message:
                 self.sendMessage(connection, DISCONNECT)
+                connection.close()
                 return
             connData['name'] = message['name']
+
+        # After authentication adding new entry of new connection. but it will not add any duplicate entry.
         if not self.addNewConnection(connData):
+            self.sendMessage(connection, DISCONNECT)
+            connection.close()
             self.checkForListening()
             return
+
+        # Sending confirmation message to the client. Now Connection established.
         self.sendMessage(connection, CONNECTED)
+
+        # Setting connection Refreshment time. if server is not receiving any message it will send a refresh message.
+        connection.settimeout(self.connectionRefreshTime)
         while self.runningStatus and connData['status']:
             try:
                 message = self.receiveMessage(connection)
-                print(message)
                 if CallOnResponse in connData:
                     connData[CallOnResponse](message)
                     continue
                 else:
                     connData['response'].append(message)
                 # Here i Will add all the code related to the response.
+            except socket.timeout:
+                self.sendMessage(connection, REFRESH)
             except:
+                print("Connection Lost")
                 self.removeConnection(self.getConnectionIp(connData), connData['name'])
                 self.checkForListening()
                 return
@@ -192,7 +211,14 @@ class Server:
         for conn in self.connections:
             if self.getConnectionIp(conn) == self.getConnectionIp(connectionData) and conn['name'] == connectionData[
                 'name']:
-                return False
+                # try:
+                print(self.sendMessage(conn['conn'], REFRESH))
+                print("--------------------------------------------------")
+                # except:
+                #     self.removeConnection(self.getConnectionIp(conn), conn['name'])
+                #     break
+                # return False
+
         if self.getTotalConnection() < self.maxConn:
             self.connections.append(connectionData)
             return True
@@ -228,7 +254,6 @@ class Server:
                 message = msg.decode(self.FORMAT)
             except UnicodeDecodeError:
                 message = pickle.loads(msg)
-            print(message)
             return message
 
     def sendMessage(self, conn, msg):
@@ -240,7 +265,7 @@ class Server:
         send_length = str(msg_length).encode(self.FORMAT)
         send_length += b" " * (self.HEADER - len(send_length))
         conn.send(send_length)
-        conn.send(message)
+        return conn.send(message)
 
 
 def allDeviceConnected():
