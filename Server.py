@@ -8,6 +8,7 @@ DISCONNECT = '!DISCONNECT'
 CONNECTED = "!CONNECTED"
 REFRESH = "!REFRESH"
 DONE = "!DONE"
+AUTHENTICATION = "!AUTH"
 
 # triggers
 CallOnResponse = "CallOnResponse"
@@ -146,6 +147,7 @@ class Server:
         connection = connData['conn']
         time.sleep(2)
         # authentication confirmation if it's required.
+        self.sendMessage(connection, AUTHENTICATION)
         if self.auth is not None:
             self.sendMessage(connection, {'auth': 'yes'})
             message = self.receiveMessage(connection)

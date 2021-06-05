@@ -6,6 +6,10 @@ import time
 # default messages.
 DISCONNECT = '!DISCONNECT'
 CONNECTED = "!CONNECTED"
+REFRESH = "!REFRESH"
+DONE = "!DONE"
+AUTHENTICATION = "!AUTH"
+
 
 # triggers
 CallOnResponse = "CallOnResponse"
@@ -38,51 +42,81 @@ class Client:
         if len(self.response) > 0:
             return self.response.pop(0)
 
-    def connectAgain(self, IpAddress, Port=5555):
-        address = (IpAddress, Port)
-        self.Client.connect(address)
+    def connectAgain(self):
+        if self.Client is not None:
+            self.Client.close()
+        address = (self.IpAddress, self.PORT)
+        self.Client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            self.Client.connect(address)
+            return True
+        except:
+            self.connectionStatus = False
+            print("Retry: Fail to connect with server")
+            return False
 
     def responseReceiver(self):
         """
         this function will perform in different thread
         :return: Nothing.
         """
+        counter = 0
+        authFlag = Flag
         while self.receiverRunningStatus:
             try:
                 message = self.receiveMessage()
-            except ConnectionAbortedError:
-                if self.retryOnDisconnect > 0:
-                    print("Retrying to connect to server")
-                    self.retryOnDisconnect -= 1
-                    self.connectAgain(self.IpAddress, self.PORT)
 
-            print(message)
-            if type(message) == str:
-                if message == DISCONNECT:
-                    self.receiverRunningStatus = False
-                    self.connectionStatus = False
-                    if self.retryOnDisconnect > 0:
-                        print("Retrying to connect to server")
-                        self.retryOnDisconnect -= 1
-                        self.connectAgain(self.IpAddress, self.PORT)
-                    return
-                elif message == CONNECTED:
-                    self.receiverRunningStatus = True
-                    self.connectionStatus = True
-                    print("Connected with server")
-            elif type(message) == dict:
-                if 'auth' in message:
-                    if message['auth'] == 'yes':
-                        self.sendMessage({'auth': self.auth, 'name': self.name})
-                    elif message['auth'] == 'no':
-                        self.sendMessage({'name': self.name})
-            if self.connectionStatus:
-                if self.CallOnResponse is not None:
-                    self.CallOnResponse(message)
-                else:
-                    self.response.append(message)
+                # Non-Dict message is only for server use.
+                if type(message) == str:
+                    if message == DISCONNECT:
+                        self.receiverRunningStatus = False
+                        self.Client.close()
+                        self.connectionStatus = False
+
+                    elif message == CONNECTED:
+                        self.receiverRunningStatus = True
+                        self.connectionStatus = True
+                        print("Connected with server")
+
+                    elif message == REFRESH:
+                        self.sendMessage(DONE)
+
+                    elif not message:
+                        if counter < 3:
+                            counter += 1
+                        else:
+                            self.connectionStatus = False
+
+                    elif message == AUTHENTICATION:
+                        authFlag = True
+
+                    else:
+                        counter = 0
+
+                elif type(message) == dict:
+                    if authFlag:
+                        if 'auth' in message:
+                            if message['auth'] == 'yes':
+                                self.sendMessage({'auth': self.auth, 'name': self.name})
+                            elif message['auth'] == 'no':
+                                self.sendMessage({'name': self.name})
+                        authFlag = False
+
+                    if self.connectionStatus:
+                        if self.CallOnResponse is not None:
+                            self.CallOnResponse(message)
+                        else:
+                            self.response.append(message)
+
+            except:
+                self.connectionStatus = False
+
+            if self.retryOnDisconnect > 0:
+                self.connectAgain()
 
     def connect(self, ipAddress, auth=None, Port=5555):
+        if self.receiverRunningStatus:
+            return
         self.auth = auth
         self.PORT = Port
         self.IpAddress = ipAddress
