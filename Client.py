@@ -61,13 +61,13 @@ class Client:
         :return: Nothing.
         """
         counter = 0
-        authFlag = Flag
+        authFlag = False
         while self.receiverRunningStatus:
             try:
                 message = self.receiveMessage()
-
+                print(message)
                 # Non-Dict message is only for server use.
-                if type(message) == str:
+                if type(message) == str or type(message) == bool:
                     if message == DISCONNECT:
                         self.receiverRunningStatus = False
                         self.Client.close()
@@ -76,6 +76,7 @@ class Client:
                     elif message == CONNECTED:
                         self.receiverRunningStatus = True
                         self.connectionStatus = True
+                        authFlag = False
                         print("Connected with server")
 
                     elif message == REFRESH:
@@ -100,7 +101,6 @@ class Client:
                                 self.sendMessage({'auth': self.auth, 'name': self.name})
                             elif message['auth'] == 'no':
                                 self.sendMessage({'name': self.name})
-                        authFlag = False
 
                     if self.connectionStatus:
                         if self.CallOnResponse is not None:
@@ -111,8 +111,14 @@ class Client:
             except:
                 self.connectionStatus = False
 
-            if self.retryOnDisconnect > 0:
-                self.connectAgain()
+            if not self.connectionStatus and not authFlag:
+                if self.retryOnDisconnect > 0:
+                    self.retryOnDisconnect -= 1
+                    self.connectAgain()
+                else:
+                    self.receiverRunningStatus = False
+                    self.Client.close()
+                    self.connectionStatus = False
 
     def connect(self, ipAddress, auth=None, Port=5555):
         if self.receiverRunningStatus:
@@ -187,7 +193,7 @@ while True:
         client.connect('192.168.43.188', {'user': 'harvindar994', 'password': 12345678})
     elif choice == '2':
         message = input()
-        client.sendMessage(message)
+        client.sendMessage({'message': message})
     elif choice == '3':
         print(client.getResponse())
     elif choice == '4':

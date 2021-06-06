@@ -15,7 +15,7 @@ CallOnResponse = "CallOnResponse"
 
 
 class Server:
-    def __init__(self, Name, auth=None, maxConn=120, maxConnReachTrigger=None, connectionRefreshTime=None):
+    def __init__(self, Name, auth=None, maxConn=120, maxConnReachTrigger=None, connectionRefreshTime=5):
         self.auth = auth
         self.name = Name
         if maxConn > 1:
@@ -42,7 +42,15 @@ class Server:
         self.FORMAT = "utf-8"
         self.IpAddress = None
         self.runningStatus = False
-        self.connectionRefreshTime = connectionRefreshTime
+
+        # connection refresh time can't be less then 5 sec
+        if type(connectionRefreshTime) == int:
+            if connectionRefreshTime < 5:
+                self.connectionRefreshTime = 5
+            else:
+                self.connectionRefreshTime = connectionRefreshTime
+        else:
+            self.connectionRefreshTime = 5
 
         # Server is listening for new connection or not is on the server it will decide on the basic on maxConn.
         self.serverListeningStatus = False
@@ -73,12 +81,14 @@ class Server:
         if self.lastActivityConn is not None:
             if self.lastActivityConn['name'] == name and self.getConnectionIp(self.lastActivityConn) == ipAddress:
                 print("From Last Active Connection: ")
-                return self.lastActivityConn['response'].pop(0)
+                if len(self.lastActivityConn['response']) > 0:
+                    return self.lastActivityConn['response'].pop(0)
         for conn in self.connections:
             if conn['name'] == name and self.getConnectionIp(conn) == ipAddress:
                 self.lastActivityConn = conn
                 print("Through itration")
-                return conn['response'].pop(0)
+                if len(conn['response']) > 0:
+                    return conn['response'].pop(0)
         return None
 
     def authentication(self, auth):
@@ -247,10 +257,10 @@ class Server:
         self.checkForListening()
 
     def addNewConnection(self, connectionData):
-        for conn in self.connections:
-            if self.getConnectionIp(conn) == self.getConnectionIp(connectionData) and conn['name'] == connectionData[
-                'name']:
-                return False
+        # for conn in self.connections:
+        #     if self.getConnectionIp(conn) == self.getConnectionIp(connectionData) and conn['name'] == connectionData[
+        #         'name']:
+        #         return False
         if self.getTotalConnection() < self.maxConn:
             self.connections.append(connectionData)
             return True
@@ -266,8 +276,11 @@ class Server:
             if self.getConnectionIp(conn) == connectionIp and conn['name'] == name:
                 conn['status'] = False
                 self.connections.remove(conn)
-                self.sendMessage(conn['conn'], DISCONNECT)
-                conn['conn'].close()
+                try:
+                    self.sendMessage(conn['conn'], DISCONNECT)
+                    conn['conn'].close()
+                except:
+                    pass
                 return True
         return False
 
@@ -304,7 +317,7 @@ def allDeviceConnected():
     print("Max Connection Limit Reached")
 
 
-server = Server('Harvindar Singh', {'user': 'harvindar994', 'password': 12345678}, 4, allDeviceConnected)
+server = Server('Harvindar Singh', {'user': 'harvindar994', 'password': 12345678}, 4, allDeviceConnected, 5)
 print(server.startServer())
 
 while True:
@@ -317,7 +330,9 @@ while True:
     print("4. View All Connected Device and IpAddress")
     print("5. Check Response Received From Device")
     print("6. Set A Connection As  Main Connection")
-    print("7. Exit")
+    print("7. Send message")
+    print("8. total thread Running")
+    print("9. Exit")
     print("Enter the choice: ")
     choice = input()
     if choice == '1':
@@ -343,5 +358,16 @@ while True:
         ip = input("Enter the IpAddress : ")
         name = input("Enter the name: ")
         server.setAsMainConnection(name, ip)
-    elif choice == '7':
+    elif choice == '9':
         exit(0)
+
+    elif choice == '7':
+        ip = input("Enter the IpAddress : ")
+        name = input("Enter the name: ")
+        msg = input("Enter the message: ")
+        for conn in server.connections:
+            if conn['addr'][0] == ip and conn['name'] == name:
+                server.sendMessage(conn['conn'], msg)
+                break
+    elif choice == '8':
+        print("Total running thread: ", threading.active_count())
