@@ -31,7 +31,7 @@ class Server:
         # it will store response of main connection.
         # in this server, we can set only one connection as the main connection when we will fetch a response
         # we can fetch it in so easy way. just by calling function getMainCoonResponse().
-        self.mainConnResponse = None
+        self.mainConnection = None
 
         # the final connection from which the user fetched the response.
         self.lastActivityConn = None
@@ -70,12 +70,14 @@ class Server:
     def setAsMainConnection(self, name, ipAddress):
         for conn in self.connections:
             if name in conn:
-                self.mainConnResponse = conn['response']
+                self.mainConnection = conn
                 return True
         return False
 
     def getMainConnResponse(self):
-        return self.mainConnResponse.pop(0)
+        if self.mainConnection is not None:
+            if len(self.mainConnection['response']) > 0:
+                return self.mainConnection['response'].pop(0)
 
     def getResponse(self, name, ipAddress):
         if self.lastActivityConn is not None:
@@ -157,36 +159,49 @@ class Server:
         connection = connData['conn']
         time.sleep(2)
         # authentication confirmation if it's required.
-        self.sendMessage(connection, AUTHENTICATION)
-        if self.auth is not None:
-            self.sendMessage(connection, {'auth': 'yes'})
-            message = self.receiveMessage(connection)
-            if not message:
-                return
-            if 'auth' not in message:
-                self.sendMessage(connection, DISCONNECT)
-                connection.close()
-                return
-            else:
-                if 'name' not in message:
-                    self.sendMessage(connection, DISCONNECT)
-                    connection.close()
-                    return
-                else:
-                    if not self.authentication(message['auth']):
+        authRetryCounter = 3
+        connection.settimeout(self.connectionRefreshTime)
+        while authRetryCounter:
+            try:
+                self.sendMessage(connection, AUTHENTICATION)
+                if self.auth is not None:
+                    self.sendMessage(connection, {'auth': 'yes'})
+                    message = self.receiveMessage(connection)
+                    if not message:
+                        return
+                    if 'auth' not in message:
                         self.sendMessage(connection, DISCONNECT)
                         connection.close()
                         return
                     else:
-                        connData['name'] = message['name']
-        else:
-            self.sendMessage(connection, {'auth': 'not'})
-            message = self.receiveMessage(connection)
-            if 'name' not in message:
-                self.sendMessage(connection, DISCONNECT)
-                connection.close()
-                return
-            connData['name'] = message['name']
+                        if 'name' not in message:
+                            self.sendMessage(connection, DISCONNECT)
+                            connection.close()
+                            return
+                        else:
+                            if not self.authentication(message['auth']):
+                                self.sendMessage(connection, DISCONNECT)
+                                connection.close()
+                                return
+                            else:
+                                connData['name'] = message['name']
+                else:
+                    self.sendMessage(connection, {'auth': 'not'})
+                    message = self.receiveMessage(connection)
+                    if 'name' not in message:
+                        self.sendMessage(connection, DISCONNECT)
+                        connection.close()
+                        return
+                    connData['name'] = message['name']
+            except socket.timeout:
+                authRetryCounter -= 1
+                continue
+            break
+
+        if not authRetryCounter:
+            self.sendMessage(connection, DISCONNECT)
+            connection.close()
+            return
 
         # After authentication adding new entry of new connection. but it will not add any duplicate entry.
         if not self.addNewConnection(connData):
@@ -199,7 +214,6 @@ class Server:
         self.sendMessage(connection, CONNECTED)
 
         # Setting connection Refreshment time. if server is not receiving any message it will send a refresh message.
-        connection.settimeout(self.connectionRefreshTime)
         refreshFlag = False
         counter = 0
         while self.runningStatus and connData['status']:
@@ -257,10 +271,6 @@ class Server:
         self.checkForListening()
 
     def addNewConnection(self, connectionData):
-        # for conn in self.connections:
-        #     if self.getConnectionIp(conn) == self.getConnectionIp(connectionData) and conn['name'] == connectionData[
-        #         'name']:
-        #         return False
         if self.getTotalConnection() < self.maxConn:
             self.connections.append(connectionData)
             return True
